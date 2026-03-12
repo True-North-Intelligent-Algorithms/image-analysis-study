@@ -17,6 +17,12 @@ from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance_matrix
 from sklearn.neighbors import KDTree
 
+import os
+print(__file__)
+
+# change working directory to script location
+os.chdir(Path(__file__).parent)
+
 registration_params = {
     'max_iterations': 1_000_000,
 }
@@ -113,7 +119,7 @@ ground_truth_coords['ground_truth_name'] = (
 
 # Load the test (submission) data and assigned it the ground truth by its friendly name.
 
-test_data = pd.read_csv('./coordinate_data_deidentified.csv')
+test_data = pd.read_csv('./coordinate_data_deidentified_nuclei.csv')
 test_data['filename'] = test_data['csv_path'].apply(lambda f: Path(f).name)
 for f, d in test_data.groupby('csv_path'):
     regex = re.match(r'.*((?:fish|nuclei)[1-4]).*', f.lower())
@@ -499,11 +505,16 @@ def do_lsa(row):
     return df
 
 
-with Pool(**parallel_pool_params) as p:
-    lsa = pd.concat(
-        p.map(do_lsa, rescaled_results.dropna().query('category == "fish"').iterrows()),
-        ignore_index=True,
-    )
+fish_results = rescaled_results.dropna().query('category == "fish"')
+if len(fish_results) > 0:
+    with Pool(**parallel_pool_params) as p:
+        lsa = pd.concat(
+            p.map(do_lsa, fish_results.iterrows()),
+            ignore_index=True,
+        )
+else:
+    # Create empty DataFrame with expected columns when no fish category items exist
+    lsa = pd.DataFrame(columns=['category', 'dataset', 'filename', 'result', 'lsa'])
 
 # Raw data. This data has **not** been registered.
 
@@ -736,6 +747,13 @@ output_stats = pd.concat(
 )
 output_stats['id'] = output_stats['filename'].str.extract(r'(R_[0-9A-Za-z]+).*')
 
+version = 'base'
+
 # EXPORTED_RESULTS
 output_stats.drop(columns=['filename', 'result', 'lsa']).to_csv(
-    'registration_stats.csv', index=False)
+    f'registration_stats_{version}.csv', index=False)
+
+from plots import create_lsa_mse_grouped_plots
+fig_raw, fig_transformed, df = create_lsa_mse_grouped_plots(registration_stats_file=f'registration_stats_{version}.csv',
+                                       output_filename_raw=f'LSA MSE Raw - Grouped by QX.2 - {version}.png',
+                                       output_filename_transformed=f'LSA MSE Transformed - Grouped by QX.2 - {version}.png')
