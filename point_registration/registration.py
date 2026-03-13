@@ -217,6 +217,11 @@ def register_guided(args: tuple[str, None]):
         td = td_orig.copy()
 
         scale = gt[:, :2].std(axis=0).mean() / td[:, :2].std(axis=0).mean()
+        
+        # apply scale to test data before calculating translation and performing registration
+        # this seems to help the registration converge
+        td[:, :2] = td[:,:2]*scale
+        
         translation = np.array([(td[:, :2].mean(axis=0) - gt[:, :2].mean(axis=0))])
 
         # Initialize a boolean array used to relax the outlier removal.
@@ -667,6 +672,11 @@ def _get_transformation_helper(df_iter):
                 break
 
         scale = (ground.std(axis=0) / test.std(axis=0))[:2].mean()
+        
+        # apply scale to test data before calculating translation and performing registration
+        # this seems to help the registration converge
+        test[:, :2] = test[:,:2]*scale
+        
         translation = (ground.mean(axis=0) - test.mean(axis=0))[:2].reshape((1, 2))
         reg = RigidRegistration(
             X=ground[:, :2],
@@ -745,7 +755,7 @@ output_stats = pd.concat(
 )
 output_stats['id'] = output_stats['filename'].str.extract(r'(R_[0-9A-Za-z]+).*')
 
-version = 'base'
+version = 'scale_flipids_corrections'
 
 # EXPORTED_RESULTS
 output_stats.drop(columns=['filename', 'result', 'lsa']).to_csv(
