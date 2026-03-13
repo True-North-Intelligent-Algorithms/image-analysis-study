@@ -226,7 +226,7 @@ def register_guided(args: tuple[str, None]):
 
         category = re.match(r'.*(fish|nuclei).*', f.lower())
 
-        flip_ids = ['R_3lAJ9xY4kGlL99f']
+        flip_ids = ['R_3lAJ9xY4kGlL99f', 'R_31bjqd6Mm8wBxN5']
         for fid in flip_ids:
             if fid in f:
                 td[:, :2] = np.hstack([td[:, 0].mean() - td[:, [0]], td[:, [1]]])
@@ -650,7 +650,7 @@ for units, columns in zip(
 
 def _get_transformation_helper(df_iter):
     _, row = df_iter
-    flip_ids = ['R_3lAJ9xY4kGlL99f']
+    flip_ids = ['R_3lAJ9xY4kGlL99f', 'R_31bjqd6Mm8wBxN5']
     try:
         ground = row['result'].item().ground_truth_coords.astype('float64')
         test = row['result'].item().test_coords.astype('float64')
