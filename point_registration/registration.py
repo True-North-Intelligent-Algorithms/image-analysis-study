@@ -116,9 +116,7 @@ ground_truth_coords['ground_truth_name'] = (
     .apply(lambda filename: friendly_names[pathlib.Path(filename).name])
 )
 
-
 # Load the test (submission) data and assigned it the ground truth by its friendly name.
-
 test_data = pd.read_csv('./coordinate_data_deidentified_nuclei.csv')
 test_data['filename'] = test_data['csv_path'].apply(lambda f: Path(f).name)
 for f, d in test_data.groupby('csv_path'):
@@ -754,6 +752,12 @@ output_stats.drop(columns=['filename', 'result', 'lsa']).to_csv(
     f'registration_stats_{version}.csv', index=False)
 
 from plots import create_lsa_mse_grouped_plots
+from plots import create_lsa_mse_software_grouped_plots
 fig_raw, fig_transformed, df = create_lsa_mse_grouped_plots(registration_stats_file=f'registration_stats_{version}.csv',
                                        output_filename_raw=f'LSA MSE Raw - Grouped by QX.2 - {version}.png',
                                        output_filename_transformed=f'LSA MSE Transformed - Grouped by QX.2 - {version}.png')
+
+fig_raw_grouped, fig_transformed_grouped, df_grouped = create_lsa_mse_software_grouped_plots(
+    registration_stats_file=f'registration_stats_{version}.csv',
+    output_filename_raw=f'LSA MSE Raw - Grouped by QX.2 - {version} - grouped.png',
+    output_filename_transformed=f'LSA MSE Transformed - Grouped by QX.2 - {version} - grouped.png')
