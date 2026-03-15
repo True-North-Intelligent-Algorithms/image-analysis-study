@@ -872,6 +872,217 @@ def create_software_boxplots(
     return fig, df_results
 
 
+def create_software_boxplots_per_nuclei(
+    coordinate_data_file='coordinate_data_deidentified_nuclei.csv',
+    ground_truth_file='ground_truth_coords.csv',
+    combined_data_file='../data_analysis/combined data deidentified.csv',
+    output_filename='Software_LSA_MSE_Boxplot_Per_Nuclei.png',
+    figsize=(12, 8)
+):
+    """
+    Create box plots of LSA MSE values grouped by software for nuclei data.
+    Calculates LSA MSE separately for EACH nuclei dataset (4 points per response ID).
+    
+    Parameters:
+    -----------
+    coordinate_data_file : str
+        Path to the coordinate data CSV file
+    ground_truth_file : str
+        Path to the ground truth CSV file
+    combined_data_file : str
+        Path to the combined data deidentified CSV file
+    output_filename : str
+        Filename to save the box plot
+    figsize : tuple
+        Figure size (width, height) in inches
+        
+    Returns:
+    --------
+    fig : matplotlib.figure.Figure
+        The created figure object
+    df_results : pd.DataFrame
+        DataFrame with software, nuclei, and MSE values
+    """
+    
+    # Get the script directory
+    script_dir = Path(__file__).parent
+    
+    # Construct full paths
+    data_path = script_dir / coordinate_data_file
+    gt_path = script_dir / ground_truth_file
+    combined_path = script_dir / combined_data_file
+    
+    # All unique response IDs
+    all_response_ids = [
+        'R_3nu9kDs66l1O03t', 'R_2cC2iQifrFmuClP', 'R_3Rxaf07hES8CPgE',
+        'R_1M6DoAmYEY3Jrvm', 'R_31bjqd6Mm8wBxN5', 'R_0638fJAPpmzLtu1',
+        'R_2cCJjlMU7i9XjMQ', 'R_2c14tLfUPR1Vnua', 'R_22s3aTqiX7gbY4u',
+        'R_3RxOa8kaiyul4bG', 'R_1GUZ4XruXifzoPp', 'R_tY87q7yGKRqww5X',
+        'R_3lAJ9xY4kGlL99f', 'R_1lxxm7Riv8MvNVz', 'R_2DNRFrAvCDUX1EL',
+        'R_3j9w1bGwWGd8yOC', 'R_cHLBH1bftzVtPDH', 'R_eRvCx60GZHVIflf',
+        'R_3kpixa7Fm6wlFk2', 'R_24HIjcCJh6uI3bu', 'R_24Nwgngl83ucQ8B',
+        'R_1F9A4K8LNlJoksJ', 'R_3kaX79RV1ul5JuI', 'R_2rCMx6wAGE7bFJh',
+        'R_2q3KgZzjsLNwxgU', 'R_1qdHCwPCdNvs9xi', 'R_6E6PxT3N1gr93yh'
+    ]
+    
+    # Nuclei dataset mapping
+    nuclei_datasets = {
+        'nuclei1': 'out_c00_dr90_label.tif',
+        'nuclei2': 'out_c90_dr90_label.tif',
+        'nuclei3': 'out_c00_dr10_label.tif',
+        'nuclei4': 'out_c90_dr10_label.tif'
+    }
+    
+    # Load data
+    print(f"Loading coordinate data from {data_path}...")
+    df = pd.read_csv(data_path)
+    
+    print(f"Loading ground truth data from {gt_path}...")
+    df_gt = pd.read_csv(gt_path, index_col=0)
+    
+    # Load combined data to get software names
+    print(f"Loading combined data from {combined_path}...")
+    df_combined = pd.read_csv(combined_path)
+    
+    # Clean up qx.2 column names
+    import re
+    df_combined['qx.2_clean'] = df_combined['qx.2'].apply(
+        lambda x: re.sub(r'\s*\([^)]*\)', '', str(x)).strip() if pd.notna(x) else x
+    )
+    
+    # Create a mapping of responseid to software name
+    software_map = df_combined.groupby('responseid')['qx.2_clean'].first().to_dict()
+    
+    # Store results - one row per nuclei per response ID
+    results = []
+    
+    # Process each response ID
+    for rid in all_response_ids:
+        print(f"Processing {rid}...")
+        
+        # Get software name
+        software_name = software_map.get(rid, 'Unknown')
+        
+        if software_name == 'Unknown':
+            continue
+        
+        # Process EACH nuclei dataset separately
+        for nuclei_name, nuclei_file in nuclei_datasets.items():
+            # Get ground truth for this nuclei dataset
+            gt_coords = df_gt[df_gt['path'].str.contains(nuclei_file, case=False, na=False)][['x', 'y', 'z']].values.astype('float64')
+            
+            if len(gt_coords) == 0:
+                continue
+            
+            # Get test data for this ID and nuclei
+            mask = df['csv_path'].str.contains(rid, case=False, na=False) & \
+                   df['csv_path'].str.contains(nuclei_name, case=False, na=False)
+            test_data = df[mask]
+            
+            if len(test_data) == 0:
+                continue
+            
+            test_coords = test_data[['x', 'y', 'z']].values.astype('float64')
+            
+            # Check for NaN or infinite values
+            if np.any(~np.isfinite(test_coords)) or np.any(~np.isfinite(gt_coords)):
+                continue
+            
+            # Apply flipping for specific IDs
+            flip_ids = ['R_3lAJ9xY4kGlL99f', 'R_31bjqd6Mm8wBxN5']
+            if rid in flip_ids:
+                test_coords[:, :2] = np.hstack([test_coords[:, 0].mean() - test_coords[:, [0]], test_coords[:, [1]]])
+                test_coords[:, :2] = (np.array([[0.0, 1.0], [-1.0, 0.0]]) @ test_coords[:, :2].T).T
+            
+            # Calculate registration
+            try:
+                scale_xy = gt_coords[:, :2].std(axis=0).mean() / test_coords[:, :2].std(axis=0).mean()
+                scale_z = gt_coords[:, 2].std() / test_coords[:, 2].std()
+                
+                if not np.isfinite(scale_xy) or not np.isfinite(scale_z):
+                    continue
+                
+                test_coords_scaled = test_coords.copy()
+                test_coords_scaled[:, :2] = test_coords[:, :2] * scale_xy
+                test_coords_scaled[:, 2] = test_coords[:, 2] * scale_z
+                
+                translation = gt_coords.mean(axis=0) - test_coords_scaled.mean(axis=0)
+                test_coords_registered = test_coords_scaled + translation
+                
+                # Calculate LSA for registered data
+                dm_reg = distance_matrix(gt_coords, test_coords_registered)
+                row_ind_reg, col_ind_reg = linear_sum_assignment(dm_reg)
+                
+                # Calculate matched distances (registered)
+                displacement_reg = gt_coords[row_ind_reg] - test_coords_registered[col_ind_reg]
+                distances_reg = np.sqrt(np.sum(displacement_reg**2, axis=1))
+                
+                # Calculate errors (registered)
+                mean_error_reg = np.mean(distances_reg)
+                mse_reg = np.mean(distances_reg**2)
+                std_error_reg = np.std(distances_reg)
+                
+                # Store result for this specific nuclei
+                results.append({
+                    'responseid': rid,
+                    'software': software_name,
+                    'nuclei': nuclei_name,
+                    'lsa_mse_registered': mse_reg
+                })
+                
+            except Exception as e:
+                print(f"  ERROR for {rid} {nuclei_name}: {e}")
+                continue
+    
+    # Create DataFrame
+    df_results = pd.DataFrame(results)
+    
+    print(f"\nCalculated LSA MSE for {len(df_results)} nuclei-response combinations")
+    
+    # Create figures directory if it doesn't exist
+    figures_dir = script_dir / 'figures'
+    figures_dir.mkdir(exist_ok=True)
+    
+    # Create box plot
+    print("Creating per-nuclei box plot...")
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    # Use seaborn for better box plots
+    import seaborn as sns
+    sns.boxplot(data=df_results, x='software', y='lsa_mse_registered', ax=ax, 
+                color='lightblue', showfliers=False)
+    sns.stripplot(data=df_results, x='software', y='lsa_mse_registered', ax=ax,
+                  color='red', alpha=0.5, size=4, jitter=True)
+    
+    ax.set_yscale('log')
+    ax.set_title('LSA MSE (Registered) by Software - Per Nuclei Dataset', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Software', fontsize=12)
+    ax.set_ylabel('LSA MSE Registered (um²) - Log Scale', fontsize=12)
+    ax.grid(True, alpha=0.3, which='both')
+    ax.tick_params(axis='x', rotation=45)
+    
+    plt.tight_layout()
+    
+    # Save plot
+    plot_path = figures_dir / output_filename
+    print(f"Saving per-nuclei box plot to {plot_path}...")
+    fig.savefig(plot_path, dpi=300, bbox_inches='tight')
+    print("Per-nuclei box plot saved successfully!")
+    
+    # Print summary statistics
+    print("\n" + "="*60)
+    print("Summary Statistics by Software (Per Nuclei)")
+    print("="*60)
+    for software in sorted(df_results['software'].unique()):
+        group_data = df_results[df_results['software'] == software]
+        print(f"\n{software} (n={len(group_data)} nuclei datasets)")
+        print(f"  Mean LSA MSE: {group_data['lsa_mse_registered'].mean():.4f} um²")
+        print(f"  Median LSA MSE: {group_data['lsa_mse_registered'].median():.4f} um²")
+        print(f"  Std LSA MSE: {group_data['lsa_mse_registered'].std():.4f} um²")
+    
+    return fig, df_results
+
+
 if __name__ == '__main__':
     # Example usage
     # fig = plot_pixel_microns_points()
@@ -880,6 +1091,10 @@ if __name__ == '__main__':
     # Create all scatter plots
     create_all_nuclei_scatterplots()
     
-    # Create software box plot
+    # Create software box plot (averaged across all nuclei)
     fig_box, df_results = create_software_boxplots()
+    
+    # Create software box plot (per nuclei dataset)
+    fig_box_per_nuclei, df_results_per_nuclei = create_software_boxplots_per_nuclei()
+    
     plt.show()
