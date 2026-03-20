@@ -1,12 +1,12 @@
 from IPython.display import Markdown, display
 from pathlib import Path
 
-# Create output directory for this response ID
-output_dir = Path(f'correct_scaling_{response_id}_figures')
+# Create output directory for figures
+output_dir = Path('correct_scaling_figures')
 output_dir.mkdir(exist_ok=True)
 
-# Save the raw comparison plot (from cell 4)
-fig_raw, ax_raw = plt.subplots(1, 1, figsize=(8, 8))
+# Save the raw comparison plot (from cell 4) - smaller, single plot
+fig_raw, ax_raw = plt.subplots(1, 1, figsize=(5, 5))
 ax_raw.scatter(gt_coords[:, 0], gt_coords[:, 1], color='red', marker='x', s=60, linewidths=2, label='GT')
 ax_raw.scatter(test_coords[:, 0], test_coords[:, 1], color='blue', marker='o', s=40, alpha=0.7, label='Submitted')
 ax_raw.set_xlabel('X (um)')
@@ -17,11 +17,11 @@ ax_raw.grid(True, alpha=0.3)
 ax_raw.set_aspect('equal')
 plt.tight_layout()
 raw_plot_path = output_dir / 'raw_coords_comparison.png'
-fig_raw.savefig(raw_plot_path, dpi=150, bbox_inches='tight')
+fig_raw.savefig(raw_plot_path, dpi=120, bbox_inches='tight')
 plt.close(fig_raw)
 
-# Save the registration comparison plot (from cell 5)
-fig_comp, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+# Save the registration comparison plot (from cell 5) - wider for side-by-side
+fig_comp, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
 # Case 1: Without pre-scaling
 ax1.scatter(gt_coords[:, 0], gt_coords[:, 1], color='red', marker='x', s=60, linewidths=2, label='GT')
@@ -52,7 +52,13 @@ print(f"✅ Plots saved to: {output_dir}/")
 
 # Generate summary markdown with actual computed values
 summary_md = f"""
-# Summary: Impact of Pre-Scaling on Point Cloud Registration
+# Summary: Impact of Pre-Scaling on Pixel/Micron Scale Correction
+
+## The Fundamental Issue
+
+This dataset highlights a common error scenario the registration algorithm was designed to handle: **submitted coordinates in pixels while ground truth is in micrometers**. The scale factor between these coordinate systems is substantial (scale ≈ {scale:.2f}), making this precisely the type of unit mismatch the algorithm should detect and correct.
+
+However, due to an order-of-operations error in the registration code, the scale correction failed to work properly, resulting in severely misaligned coordinates. This is particularly concerning because pixel-to-micron conversion is a common source of coordinate scaling.
 
 ## Dataset Information
 - **Response ID**: {response_id}
@@ -62,7 +68,8 @@ summary_md = f"""
 - **User Confidence Level**: {confidence_level}
 - **Reported LSA MSE (Transformed)**: {reported_lsa_mse_transformed:.4f} um²
 
-## What We Investigated
+
+## What Was Investigated
 
 We examined the point cloud registration algorithm used to align submitted coordinates with ground truth. The registration involves:
 1. Calculating a **scale factor** between test and ground truth coordinates
@@ -109,12 +116,14 @@ Think of it like this: If you measure a distance in meters, but then the registr
 ## Visual Comparison
 
 ### Original Submitted Coordinates vs Ground Truth
-![Raw coordinates comparison showing submitted points (blue) and ground truth (red x markers)]({output_dir}/raw_coords_comparison.png)
+
+<img src="correct_scaling_figures/raw_coords_comparison.png" width="380">
 
 The submitted coordinates are in pixel space and need scaling to match the ground truth micron space.
 
 ### Registration Results Comparison
-![Side-by-side comparison of registration approaches]({output_dir}/registration_comparison.png)
+
+<img src="correct_scaling_figures/registration_comparison.png" width="800">
 
 **Left**: Without pre-scaling - coordinates remain misaligned with ~{rmse_case1:.2f} um RMSE error.  
 **Right**: With pre-scaling - coordinates align correctly with ~{rmse_case2:.2f} um RMSE error.
@@ -130,21 +139,19 @@ The incorrect approach (blue circles) shows clear systematic offset from ground 
 | **With Pre-scaling** (Corrected) | **{mse_case2:.4f}** | **{rmse_case2:.2f} um** |
 | **Improvement** | | **{((mse_case1 - mse_case2) / mse_case1 * 100):.2f}%** |
 
-*Note: Our reproduction without pre-scaling matches the paper's reported value exactly, confirming this is the method used.*
+*Note: Our reproduction without pre-scaling matches the paper's reported value, confirming this is the method used.*
 
 ## Context & Next Steps
 
-This is a **small code change** (literally one line: `test_coords *= scale` before computing translation) with **large impact** on results. The error affects all datasets but particularly those with scale factors far from 1.0.
+This is a **small code change** (literally one line: `test_coords *= scale` before computing translation) with **large impact** on results. The error affects all datasets but particularly those with scale factors far from 1.0 — **ironically, the exact scenario the registration was designed to handle**.
+
+The pixel-to-micron conversion error is likely one of the most common mistakes participants could make, yet the registration algorithm fails to correct it properly. This undermines a key objective of the registration approach.
 
 We're sharing this finding constructively because:
 - The registration code is complex and this type of subtle bug is understandable
 - The impact varies by dataset, so it may not have been obvious in initial testing
-- Other participants may have made similar errors in their pipelines
-- Understanding this helps interpret the study results more accurately
+- Other datasets had similar errors in their pipelines
 
-We believe there may be additional registration considerations worth discussing, but wanted to start with this concrete, demonstrable case. We're happy to provide more details, code, or analysis to help verify and address this issue.
-
-**Question for the community**: Has anyone else encountered similar coordinate space issues when implementing registration pipelines? What approaches have you found robust?
 """
 
 # Display in notebook
@@ -155,4 +162,5 @@ output_filename = f'correct_scaling_{response_id}_report.md'
 with open(output_filename, 'w') as f:
     f.write(summary_md)
     
-print(f"✅ Report saved to: {output_filename}")
+print(f"\n✅ Report saved to: {output_filename}")
+print(f"✅ Figures saved to: {output_dir}/")

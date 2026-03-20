@@ -63,12 +63,14 @@ Think of it like this: If you measure a distance in meters, but then the registr
 ## Visual Comparison
 
 ### Original Submitted Coordinates vs Ground Truth
-![Raw coordinates comparison showing submitted points (blue) and ground truth (red x markers)](correct_scaling_figures/raw_coords_comparison.png)
+
+<img src="correct_scaling_figures/raw_coords_comparison.png" width="450">
 
 The submitted coordinates are in pixel space and need scaling to match the ground truth micron space.
 
 ### Registration Results Comparison
-![Side-by-side comparison of registration approaches](correct_scaling_figures/registration_comparison.png)
+
+<img src="correct_scaling_figures/registration_comparison.png" width="800">
 
 **Left**: Without pre-scaling - coordinates remain misaligned with ~10.68 um RMSE error.  
 **Right**: With pre-scaling - coordinates align correctly with ~0.12 um RMSE error.
